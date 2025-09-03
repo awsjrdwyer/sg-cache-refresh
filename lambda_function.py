@@ -2,8 +2,24 @@ import boto3
 import json
 
 def lambda_handler(event, context):
-    # Extract S3 bucket name from event
-    bucket_name = event['Records'][0]['s3']['bucket']['name']
+    # Extract S3 event details
+    s3_record = event['Records'][0]
+    bucket_name = s3_record['s3']['bucket']['name']
+    object_key = s3_record['s3']['object']['key']
+    
+    # Exit only if it's a PUT and more than 1 version exists
+    if s3_record['eventName'] == 'ObjectCreated:Put':
+        s3_client = boto3.client('s3')
+        versions = s3_client.list_object_versions(
+            Bucket=bucket_name,
+            Prefix=object_key
+        )
+        
+        if len(versions.get('Versions', [])) > 1:
+            return {
+                'statusCode': 200,
+                'body': json.dumps({'message': 'Skipped - more than 1 version exists'})
+            }
     
     # Define regions to check
     regions = ['us-east-1', 'us-east-2']
