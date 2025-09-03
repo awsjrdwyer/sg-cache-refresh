@@ -19,23 +19,28 @@ def lambda_handler(event, context):
             response = sg_client.list_file_shares()
             file_shares = response['FileShareInfoList']
             
-            # Filter file shares by S3 bucket name
-            matching_shares = [
-                share for share in file_shares 
-                if share.get('LocationARN', '').endswith(f'/{bucket_name}')
-            ]
-            
-            # Refresh cache for each matching file share
-            for share in matching_shares:
+            # Check each file share for bucket match
+            for share in file_shares:
                 file_share_arn = share['FileShareARN']
                 
-                sg_client.refresh_cache(FileShareARN=file_share_arn)
+                # Get detailed info including LocationARN
+                describe_response = sg_client.describe_smb_file_shares(
+                    FileShareARNList=[file_share_arn]
+                )
                 
-                refresh_results.append({
-                    'FileShareARN': file_share_arn,
-                    'Region': region,
-                    'RefreshStatus': 'Success'
-                })
+                smb_file_share = describe_response['SMBFileShareInfoList'][0]
+                location_arn = smb_file_share.get('LocationARN', '')
+                
+                # Check if bucket name is in the LocationARN
+                if bucket_name in location_arn:
+                    sg_client.refresh_cache(FileShareARN=file_share_arn)
+                    
+                    refresh_results.append({
+                        'FileShareARN': file_share_arn,
+                        'Region': region,
+                        'LocationARN': location_arn,
+                        'RefreshStatus': 'Success'
+                    })
         
         return {
             'statusCode': 200,
